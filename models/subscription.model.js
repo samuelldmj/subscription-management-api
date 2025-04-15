@@ -74,8 +74,6 @@ const subscriptionSchema = new mongoose.Schema({
     renewalDate: {
         type: Date,
         // Sets the field type as Date for the subscription renewal date.
-        required: true,
-        // Makes the renewal date field mandatory.
         validate: {
             validator: function (value) {
                 return value > this.startDate;
@@ -95,13 +93,19 @@ const subscriptionSchema = new mongoose.Schema({
         // Makes the user_id field mandatory.
         index: true
         // Creates an index on user_id for faster queries.
+    },
+
+    paymentMethod: {
+        type: String,
+        enum: ['Credit Card', 'PayPal', 'Bank Transfer', 'Other'],
+        trim: true,
     }
 }, { timestamps: true })
 // Adds createdAt and updatedAt fields automatically to track document creation/update times.
 
 subscriptionSchema.pre('save', function (next) {
     // Defines a pre-save middleware hook that runs before saving a document.
-    if (!this.renewalDate) {
+    if (!this.renewalDate && this.startDate && this.frequency) {
         // Checks if renewalDate is not set.
         const renewalPeriod = {
             daily: 1,
