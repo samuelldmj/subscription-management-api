@@ -12,6 +12,7 @@ import morgan from "morgan";
 // Import the User and Subscription models
 import User from "./models/user.model.js";
 import Subscription from "./models/subscription.model.js";
+import arcjetMiddleware from "./middlewares/arcjet.middleware.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(morgan('dev'));
+app.use(arcjetMiddleware);
 
 // Basic route for testing
 app.get('/', (req, res) => {
@@ -32,6 +34,8 @@ app.use('/api/v1/subscriptions', subscriptionRouter);
 
 //global errorHandling
 app.use(errorMiddleware);
+
+
 
 // Start server and connect to database
 const startServer = async () => {

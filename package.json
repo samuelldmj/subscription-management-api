@@ -8,6 +8,8 @@
     "dev": "nodemon app.js"
   },
   "dependencies": {
+    "@arcjet/inspect": "^1.0.0-beta.5",
+    "@arcjet/node": "^1.0.0-beta.5",
     "bcrypt": "^5.1.1",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
