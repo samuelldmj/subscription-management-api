@@ -13,6 +13,7 @@ import morgan from "morgan";
 import User from "./models/user.model.js";
 import Subscription from "./models/subscription.model.js";
 import arcjetMiddleware from "./middlewares/arcjet.middleware.js";
+import workFlowRouter from "./routes/workflow.routes.js";
 
 const app = express();
 
@@ -31,11 +32,10 @@ app.get('/', (req, res) => {
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/subscriptions', subscriptionRouter);
+app.use('/api/v1/workflows', workFlowRouter);
 
 //global errorHandling
 app.use(errorMiddleware);
-
-
 
 // Start server and connect to database
 const startServer = async () => {
