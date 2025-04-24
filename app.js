@@ -7,13 +7,21 @@ import connectToDatabase from "./database/mongodb.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
+import cron from "node-cron";
 
+//cron job
+import processSubscriptionTasks from "./cron/subscriptionTask.js";
 
-// Import the User and Subscription models
+// Import  models
 import User from "./models/user.model.js";
 import Subscription from "./models/subscription.model.js";
+import SubscriptionHistory from "./models/subscriptionHistory.model.js";
+
+
 import arcjetMiddleware from "./middlewares/arcjet.middleware.js";
 import workFlowRouter from "./routes/workflow.routes.js";
+
+
 
 const app = express();
 
@@ -36,6 +44,9 @@ app.use('/api/v1/workflows', workFlowRouter);
 
 //global errorHandling
 app.use(errorMiddleware);
+
+// Schedule cron job to process subscription tasks daily at midnight
+cron.schedule("0 0 * * *", processSubscriptionTasks);
 
 // Start server and connect to database
 const startServer = async () => {
