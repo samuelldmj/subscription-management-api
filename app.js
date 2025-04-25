@@ -29,7 +29,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(morgan('dev'));
-app.use(arcjetMiddleware);
+// app.use(arcjetMiddleware);
+
+
+// Apply arcjetMiddleware only to non-workflow routes
+app.use((req, res, next) => {
+    if (req.path.startsWith("/api/v1/workflows")) {
+        return next();
+    }
+    return arcjetMiddleware(req, res, next);
+});
 
 // Basic route for testing
 app.get('/', (req, res) => {
