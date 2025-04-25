@@ -17,6 +17,7 @@ const getUser = async (req, res, next) => {
 
     try {
         // console.log(req.params.id);
+        console.log(req.params);
         // console.log(req);
         const user = await User.findById(req.params.id).select('-password');
 
