@@ -7,22 +7,22 @@ import utc from "dayjs/plugin/utc.js";
 
 dayjs.extend(utc);
 
-const createSubscription = async (req, res, next) => {
+const createSubscriptionTest = async (req, res, next) => {
     try {
-        // Validating frequency
+        // Validate frequency
         const validFrequencies = ["daily", "weekly", "monthly", "yearly"];
         if (!validFrequencies.includes(req.body.frequency)) {
             throw new Error(`Invalid frequency: ${req.body.frequency}`);
         }
 
-        // Validating and setting startDate
+        // Validate and set startDate
         let startDate;
         if (req.body.startDate) {
             const parsedDate = dayjs(req.body.startDate);
             if (!parsedDate.isValid()) {
                 throw new Error("Invalid startDate format");
             }
-            // Ensuring that startDate is not in the past
+            // Ensure startDate is not in the past
             if (parsedDate.isBefore(dayjs().utc(), "day")) {
                 throw new Error("startDate cannot be in the past");
             }
@@ -31,7 +31,7 @@ const createSubscription = async (req, res, next) => {
             startDate = dayjs().utc().toDate();
         }
 
-        // Calculating renewal date based on frequency
+        // Calculate renewal date based on frequency
         let renewalDate;
         switch (req.body.frequency) {
             case "daily":
@@ -66,19 +66,26 @@ const createSubscription = async (req, res, next) => {
             details: { startDate, renewalDate, frequency: req.body.frequency, autoRenew: subscription.autoRenew },
         });
 
-        // Trigger reminders
-        const response = await workFlowClient.trigger({
-            url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
-            body: { subscriptionId: subscription._id.toString() },
+        // Trigger test task (temporary for testing)
+        const testResponse = await workFlowClient.trigger({
+            url: `${SERVER_URL}/api/v1/test`,
+            body: {
+                test: "scheduled",
+                subscriptionId: subscription._id.toString(),
+                triggeredAt: dayjs().utc().toISOString()
+            },
             headers: { "Content-Type": "application/json" },
+            notBefore: Math.floor(Date.now() / 1000) + 120, // 2 minutes from now
             retries: 3,
         });
+
+        console.log(`Scheduled test task for subscription ${subscription._id} at ${dayjs((Math.floor(Date.now() / 1000) + 120) * 1000).utc().toISOString()} with notBefore: ${Math.floor(Date.now() / 1000) + 120}`);
 
         res.status(201).json({
             success: true,
             data: {
                 subscription,
-                workFlowRunId: response.workflowRunId || "pending",
+                testWorkFlowRunId: testResponse.workflowRunId || "pending",
             },
         });
     } catch (err) {
@@ -87,7 +94,7 @@ const createSubscription = async (req, res, next) => {
     }
 };
 
-const renewSubscription = async (req, res, next) => {
+const renewSubscriptionTest = async (req, res, next) => {
     try {
         const { subscriptionId, autoRenew } = req.body;
 
@@ -101,7 +108,7 @@ const renewSubscription = async (req, res, next) => {
         }
 
         // Calculate next renewal date
-        let renewalDate = dayjs(subscription.renewalDate);
+        let renewalDate = dayjs(subscription.renewalDate).utc();
         let frequencyUnit;
         switch (subscription.frequency) {
             case "daily":
@@ -137,19 +144,26 @@ const renewSubscription = async (req, res, next) => {
             details: { newRenewalDate: renewalDate.toDate(), autoRenew: subscription.autoRenew },
         });
 
-        // Trigger reminders
-        const response = await workFlowClient.trigger({
-            url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
-            body: { subscriptionId: subscription._id },
+        // Trigger test task (temporary for testing)
+        const testResponse = await workFlowClient.trigger({
+            url: `${SERVER_URL}/api/v1/test`,
+            body: {
+                test: "scheduled",
+                subscriptionId: subscription._id.toString(),
+                triggeredAt: dayjs().utc().toISOString()
+            },
             headers: { "Content-Type": "application/json" },
+            notBefore: Math.floor(Date.now() / 1000) + 120, // 2 minutes from now
             retries: 3,
         });
+
+        console.log(`Scheduled test task for renewed subscription ${subscription._id} at ${dayjs((Math.floor(Date.now() / 1000) + 120) * 1000).utc().toISOString()} with notBefore: ${Math.floor(Date.now() / 1000) + 120}`);
 
         res.json({
             success: true,
             data: {
                 subscription,
-                workFlowRunId: response.workflowRunId || "pending",
+                testWorkFlowRunId: testResponse.workflowRunId || "pending",
             },
             message: "Subscription renewed successfully",
         });
@@ -159,7 +173,7 @@ const renewSubscription = async (req, res, next) => {
     }
 };
 
-const getUserSubscriptions = async (req, res, next) => {
+const getUserSubscriptionsTest = async (req, res, next) => {
     try {
         if (req.user._id.toString() !== req.params.id) {
             const error = new Error("You are not the owner of this account!!");
@@ -178,4 +192,4 @@ const getUserSubscriptions = async (req, res, next) => {
     }
 };
 
-export { createSubscription, renewSubscription, getUserSubscriptions };
+export { createSubscriptionTest, renewSubscriptionTest, getUserSubscriptionsTest };

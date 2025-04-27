@@ -4,10 +4,22 @@ const errorMiddleware = (err, req, res, next) => {
 
     try {
 
+        if (res.headersSent) {
+            return next(err); // Skip if headers already sent
+        }
+
+
         let error = { ...err }
         error.message = err.message;
 
         console.error(err)
+
+        // Logging error details (including stack trace in development mode)
+        console.error("Error:", {
+            message: err.message,
+            stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+        });
+
 
         //Mongoose bad ObjectId
         if (err.name === 'CastError') {

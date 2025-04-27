@@ -94,7 +94,7 @@ const sendReminders = async (req, res) => {
                 reminderLabel = `${daysOffset}-day-grace-period`;
             }
 
-            console.log(`Scheduling ${reminderLabel} for ${reminderDate.toISOString()}`);
+
 
             if (reminderDate.isAfter(now)) {
                 const response = await workFlowClient.trigger({
@@ -110,6 +110,7 @@ const sendReminders = async (req, res) => {
                     notBefore: Math.floor(reminderDate.valueOf() / 1000),
                     retries: 3,
                 });
+                console.log(`Scheduling ${reminderLabel} for ${reminderDate.toISOString()} with notBefore: ${Math.floor(reminderDate.valueOf() / 1000)}`);
 
                 scheduledReminders.push({
                     reminderLabel,

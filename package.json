@@ -10,14 +10,18 @@
   "dependencies": {
     "@arcjet/inspect": "^1.0.0-beta.5",
     "@arcjet/node": "^1.0.0-beta.5",
+    "@upstash/workflow": "^0.2.12",
     "bcrypt": "^5.1.1",
     "cookie-parser": "~1.4.4",
+    "dayjs": "^1.11.13",
+    "dayjs-plugin-utc": "^0.1.2",
     "debug": "~2.6.9",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.13.2",
-    "morgan": "~1.9.1"
+    "morgan": "~1.9.1",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
