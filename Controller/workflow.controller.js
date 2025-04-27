@@ -1,4 +1,3 @@
-
 import { SERVER_URL } from "../config/env.js";
 import { workFlowClient } from "../config/upstash.js";
 import Subscription from "../models/subscription.model.js";
@@ -10,17 +9,39 @@ const GRACE_PERIOD_REMINDERS = [1, 3, 5]; // Reminders during 7-day grace period
 
 const sendReminders = async (req, res) => {
     try {
-        const { subscriptionId } = req.body;
+        console.log("Received req.body in sendReminders:", req.body);
+
+        // Handle Upstash workflow payload
+        let subscriptionId;
+        if (Array.isArray(req.body) && req.body[0]?.body) {
+            // Extract and decode the base64-encoded body
+            const encodedBody = req.body[0].body;
+            const decodedBody = Buffer.from(encodedBody, "base64").toString("utf-8");
+            console.log("Decoded body:", decodedBody);
+
+            // Parse the decoded body as JSON
+            const parsedBody = JSON.parse(decodedBody);
+            subscriptionId = parsedBody.subscriptionId;
+        } else {
+            // Fallback for direct JSON body (e.g., manual testing)
+            subscriptionId = req.body.subscriptionId;
+        }
+
+        // Validate subscriptionId
+        if (!subscriptionId) {
+            console.error("No subscriptionId provided in request body");
+            return res.status(400).json({
+                success: false,
+                message: "subscriptionId is required",
+                details: { reqBody: req.body },
+            });
+        }
 
         console.log(`Processing reminders for subscriptionId: ${subscriptionId}`);
-        console.error(`Subscription ${subscriptionId} not found`);
-
-
 
         // Fetch subscription
         const subscription = await Subscription.findById(subscriptionId).populate("user_id", "name email");
         if (!subscription) {
-            console.error(`Subscription ${subscriptionId} is not active, status: ${subscription.status}`);
             console.error(`Subscription ${subscriptionId} not found`);
             return res.status(400).json({
                 success: false,
@@ -28,8 +49,6 @@ const sendReminders = async (req, res) => {
                 details: { subscriptionId },
             });
         }
-
-        console.log(`Subscription found: ${JSON.stringify(subscription)}`);
 
         if (subscription.status !== "active") {
             console.error(`Subscription ${subscriptionId} is not active, status: ${subscription.status}`);
@@ -122,7 +141,7 @@ const sendReminders = async (req, res) => {
             success: false,
             error: error.message,
             details: {
-                subscriptionId: req.body.subscriptionId,
+                subscriptionId: req.body.subscriptionId || "unknown",
                 timestamp: new Date().toISOString(),
             },
         });
@@ -131,7 +150,29 @@ const sendReminders = async (req, res) => {
 
 const handleReminderTask = async (req, res) => {
     try {
-        const { subscriptionId, reminderLabel, userEmail, userName, reminderType } = req.body;
+        let subscriptionId, reminderLabel, userEmail, userName, reminderType;
+
+        // Handle Upstash workflow payload
+        if (Array.isArray(req.body) && req.body[0]?.body) {
+            const encodedBody = req.body[0].body;
+            const decodedBody = Buffer.from(encodedBody, "base64").toString("utf-8");
+            console.log("Decoded body in handleReminderTask:", decodedBody);
+            const parsedBody = JSON.parse(decodedBody);
+            ({ subscriptionId, reminderLabel, userEmail, userName, reminderType } = parsedBody);
+        } else {
+            // Fallback for direct JSON body
+            ({ subscriptionId, reminderLabel, userEmail, userName, reminderType } = req.body);
+        }
+
+        // Validate required fields
+        if (!subscriptionId || !reminderLabel || !userEmail || !userName || !reminderType) {
+            console.error("Missing required fields in handleReminderTask");
+            return res.status(400).json({
+                success: false,
+                message: "Required fields are missing",
+                details: { reqBody: req.body },
+            });
+        }
 
         const message =
             reminderType === "pre-renewal"
@@ -161,7 +202,7 @@ const handleReminderTask = async (req, res) => {
         res.status(500).json({
             success: false,
             error: error.message,
-            details: { subscriptionId: req.body.subscriptionId },
+            details: { subscriptionId: req.body.subscriptionId || "unknown" },
         });
     }
 };
