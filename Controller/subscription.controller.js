@@ -10,6 +10,7 @@ dayjs.extend(utc);
 const createSubscription = async (req, res, next) => {
     try {
         // Validating frequency
+        // console.log(dayjs().format("Z"));
         const validFrequencies = ["daily", "weekly", "monthly", "yearly"];
         if (!validFrequencies.includes(req.body.frequency)) {
             throw new Error(`Invalid frequency: ${req.body.frequency}`);

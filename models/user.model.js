@@ -29,5 +29,3 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 export default User;
-
-//{name:'John Doe',email:'jdemail.com, password:'password}
