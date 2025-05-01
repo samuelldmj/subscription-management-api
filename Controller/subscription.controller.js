@@ -4,35 +4,37 @@ import Subscription from "../models/subscription.model.js";
 import SubscriptionHistory from "../models/subscriptionHistory.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
 
 dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const createSubscription = async (req, res, next) => {
     try {
-        // Validating frequency
-        // console.log(dayjs().format("Z"));
+        // Validate frequency
         const validFrequencies = ["daily", "weekly", "monthly", "yearly"];
         if (!validFrequencies.includes(req.body.frequency)) {
             throw new Error(`Invalid frequency: ${req.body.frequency}`);
         }
 
-        // Validating and setting startDate
+        // Validate and set startDate in customer's timezone
         let startDate;
+        const customerTimezone = req.body.timezone || "UTC";
         if (req.body.startDate) {
-            const parsedDate = dayjs(req.body.startDate);
+            const parsedDate = dayjs.tz(req.body.startDate, customerTimezone);
             if (!parsedDate.isValid()) {
                 throw new Error("Invalid startDate format");
             }
-            // Ensuring that startDate is not in the past
-            if (parsedDate.isBefore(dayjs().utc(), "day")) {
+            // Ensure startDate is not in the past (in customer's timezone)
+            if (parsedDate.isBefore(dayjs().tz(customerTimezone), "day")) {
                 throw new Error("startDate cannot be in the past");
             }
-            startDate = parsedDate.utc().toDate();
+            startDate = parsedDate.utc().startOf("day").toDate();
         } else {
-            startDate = dayjs().utc().toDate();
+            startDate = dayjs().utc().startOf("day").toDate();
         }
 
-        // Calculating renewal date based on frequency
+        // Calculate renewal date based on frequency
         let renewalDate;
         switch (req.body.frequency) {
             case "daily":
@@ -58,13 +60,14 @@ const createSubscription = async (req, res, next) => {
             renewalDate,
             status: "active",
             autoRenew: req.body.autoRenew !== undefined ? req.body.autoRenew : true,
+            timezone: customerTimezone,
         });
 
         // Log audit trail
         await SubscriptionHistory.create({
             subscriptionId: subscription._id,
             action: "created",
-            details: { startDate, renewalDate, frequency: req.body.frequency, autoRenew: subscription.autoRenew },
+            details: { startDate, renewalDate, frequency: req.body.frequency, autoRenew: subscription.autoRenew, timezone: customerTimezone },
         });
 
         // Trigger reminders
@@ -102,6 +105,7 @@ const renewSubscription = async (req, res, next) => {
         }
 
         // Calculate next renewal date
+        //Parses it into dayjs instance using dayjs package
         let renewalDate = dayjs(subscription.renewalDate);
         let frequencyUnit;
         switch (subscription.frequency) {

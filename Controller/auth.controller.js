@@ -59,7 +59,7 @@ const signIn = async (req, res, next) => {
 
         if (!getUserByEmail) {
             const error = new Error('User not found');
-            error.statusCode = 404
+            error.statusCode = 404;
             throw error;
         }
 

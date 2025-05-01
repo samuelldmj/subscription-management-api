@@ -1,35 +1,35 @@
+
 import { SERVER_URL } from "../config/env.js";
 import { workFlowClient } from "../config/upstash.js";
 import Subscription from "../models/subscription.model.js";
 import SubscriptionHistory from "../models/subscriptionHistory.model.js";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
 
-const REMINDERS = [7, 5, 2, 1]; // Pre-renewal reminders
-const GRACE_PERIOD_REMINDERS = [1, 3, 5]; // Reminders during 7-day grace period
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const REMINDERS = [7, 5, 2, 1];
+const GRACE_PERIOD_REMINDERS = [1, 3, 5];
 
 const sendReminders = async (req, res) => {
     try {
         console.log("Received req.body in sendReminders:", req.body);
 
-        // Handle Upstash workflow payload
         let subscriptionId;
         if (Array.isArray(req.body) && req.body[0]?.body) {
-            // Extract and decode the base64-encoded body
             const encodedBody = req.body[0].body;
             const decodedBody = Buffer.from(encodedBody, "base64").toString("utf-8");
-            console.log("Decoded body:", decodedBody);
-
-            // Parse the decoded body as JSON
+            // console.log("Decoded body:", decodedBody);
             const parsedBody = JSON.parse(decodedBody);
             subscriptionId = parsedBody.subscriptionId;
         } else {
-            // Fallback for direct JSON body (e.g., manual testing)
             subscriptionId = req.body.subscriptionId;
         }
 
-        // Validate subscriptionId
         if (!subscriptionId) {
-            console.error("No subscriptionId provided in request body");
+            console.error("No subscriptionId provided");
             return res.status(400).json({
                 success: false,
                 message: "subscriptionId is required",
@@ -37,10 +37,7 @@ const sendReminders = async (req, res) => {
             });
         }
 
-        console.log(`Processing reminders for subscriptionId: ${subscriptionId}`);
-
-        // Fetch subscription
-        const subscription = await Subscription.findById(subscriptionId).populate("user_id", "name email");
+        const subscription = await Subscription.findById(subscriptionId).populate("user_id", "name email timezone");
         if (!subscription) {
             console.error(`Subscription ${subscriptionId} not found`);
             return res.status(400).json({
@@ -59,20 +56,20 @@ const sendReminders = async (req, res) => {
             });
         }
 
-        const renewalDate = dayjs(subscription.renewalDate);
-        const now = dayjs();
-        const gracePeriodEnd = renewalDate.add(7, "day"); // 7-day grace period
+        const customerTimezone = subscription.user_id.timezone || "UTC";
+        const renewalDate = dayjs(subscription.renewalDate).tz(customerTimezone);
+        const now = dayjs().tz(customerTimezone);
+        const gracePeriodEnd = renewalDate.add(7, "day");
         let reminderType = "pre-renewal";
         let remindersToSchedule = REMINDERS;
 
-        console.log(`Renewal date: ${renewalDate.toISOString()}, Now: ${now.toISOString()}`);
+        console.log(`Timezone: ${customerTimezone}, Renewal date: ${renewalDate.toISOString()}, Now: ${now.toISOString()}`);
 
-        // Determine reminder type and schedule
         if (now.isAfter(renewalDate) && now.isBefore(gracePeriodEnd)) {
             reminderType = "grace-period";
             remindersToSchedule = GRACE_PERIOD_REMINDERS;
         } else if (now.isAfter(gracePeriodEnd)) {
-            console.error(`Subscription ${subscriptionId} is past grace period, gracePeriodEnd: ${gracePeriodEnd.toISOString()}`);
+            console.error(`Subscription ${subscriptionId} is past grace period`);
             return res.status(400).json({
                 success: false,
                 message: `Subscription ${subscriptionId} is past grace period`,
@@ -80,23 +77,27 @@ const sendReminders = async (req, res) => {
             });
         }
 
-        // Schedule reminders
         const scheduledReminders = [];
         for (const daysOffset of remindersToSchedule) {
-            let reminderDate;
-            let reminderLabel;
+            let reminderDate, reminderLabel;
 
             if (reminderType === "pre-renewal") {
-                reminderDate = renewalDate.subtract(daysOffset, "day");
+                reminderDate = renewalDate.subtract(daysOffset, "day").startOf("day");
                 reminderLabel = `${daysOffset}-day-pre-renewal`;
             } else {
-                reminderDate = renewalDate.add(daysOffset, "day");
+                reminderDate = renewalDate.add(daysOffset, "day").startOf("day");
                 reminderLabel = `${daysOffset}-day-grace-period`;
             }
 
-
-
             if (reminderDate.isAfter(now)) {
+                const notBefore = Math.floor(reminderDate.valueOf() / 1000);
+                const nowUnix = Math.floor(now.valueOf() / 1000);
+
+                if (notBefore <= nowUnix) {
+                    console.warn(`Skipping ${reminderLabel}: notBefore (${notBefore}) is not in the future`);
+                    continue;
+                }
+
                 const response = await workFlowClient.trigger({
                     url: `${SERVER_URL}/api/v1/workflows/subscription/reminder-task`,
                     body: {
@@ -107,10 +108,11 @@ const sendReminders = async (req, res) => {
                         reminderType,
                     },
                     headers: { "Content-Type": "application/json" },
-                    notBefore: Math.floor(reminderDate.valueOf() / 1000),
+                    notBefore,
                     retries: 3,
                 });
-                console.log(`Scheduling ${reminderLabel} for ${reminderDate.toISOString()} with notBefore: ${Math.floor(reminderDate.valueOf() / 1000)}`);
+
+                console.log(`Scheduled ${reminderLabel} for ${reminderDate.toISOString()} (notBefore: ${notBefore}, workflowRunId: ${response.workflowRunId || "pending"})`);
 
                 scheduledReminders.push({
                     reminderLabel,
@@ -120,7 +122,10 @@ const sendReminders = async (req, res) => {
             }
         }
 
-        // Log audit trail
+        // Log QStash workflow runs
+        const { runs } = await workFlowClient.logs();
+        console.log("QStash workflow runs:", runs);
+
         await SubscriptionHistory.create({
             subscriptionId: subscription._id,
             action: "remindersScheduled",
@@ -153,7 +158,6 @@ const handleReminderTask = async (req, res) => {
     try {
         let subscriptionId, reminderLabel, userEmail, userName, reminderType;
 
-        // Handle Upstash workflow payload
         if (Array.isArray(req.body) && req.body[0]?.body) {
             const encodedBody = req.body[0].body;
             const decodedBody = Buffer.from(encodedBody, "base64").toString("utf-8");
@@ -161,11 +165,9 @@ const handleReminderTask = async (req, res) => {
             const parsedBody = JSON.parse(decodedBody);
             ({ subscriptionId, reminderLabel, userEmail, userName, reminderType } = parsedBody);
         } else {
-            // Fallback for direct JSON body
             ({ subscriptionId, reminderLabel, userEmail, userName, reminderType } = req.body);
         }
 
-        // Validate required fields
         if (!subscriptionId || !reminderLabel || !userEmail || !userName || !reminderType) {
             console.error("Missing required fields in handleReminderTask");
             return res.status(400).json({
@@ -183,10 +185,6 @@ const handleReminderTask = async (req, res) => {
         console.log(`Triggering ${reminderLabel} for subscription ${subscriptionId}`);
         console.log(`Sending reminder to ${userName} at ${userEmail}: ${message}`);
 
-        // Placeholder for email/notification logic
-        // Example: await sendEmail(userEmail, `Subscription Reminder`, message);
-
-        // Log audit trail
         await SubscriptionHistory.create({
             subscriptionId,
             action: "reminderSent",
