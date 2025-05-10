@@ -1,4 +1,3 @@
-
 import Subscription from "../models/subscription.model.js";
 import SubscriptionHistory from "../models/subscriptionHistory.model.js";
 import Reminder from "../models/reminder.model.js";
@@ -38,25 +37,25 @@ const createSubscription = async (req, res, next) => {
             if (parsedDate.isBefore(dayjs().tz(customerTimezone), "day")) {
                 throw new Error("startDate cannot be in the past");
             }
-            startDate = parsedDate.utc().startOf("day").toDate();
+            startDate = parsedDate.startOf("day").toDate(); // Midnight in user's timezone
         } else {
-            startDate = dayjs().utc().startOf("day").toDate();
+            startDate = dayjs().tz(customerTimezone).startOf("day").toDate();
         }
 
         // Calculate renewal date based on frequency
         let renewalDate;
         switch (req.body.frequency) {
             case "daily":
-                renewalDate = dayjs(startDate).utc().add(1, "day").toDate();
+                renewalDate = dayjs(startDate).tz(customerTimezone).add(1, "day").startOf("day").toDate();
                 break;
             case "weekly":
-                renewalDate = dayjs(startDate).utc().add(1, "week").toDate();
+                renewalDate = dayjs(startDate).tz(customerTimezone).add(1, "week").startOf("day").toDate();
                 break;
             case "monthly":
-                renewalDate = dayjs(startDate).utc().add(1, "month").toDate();
+                renewalDate = dayjs(startDate).tz(customerTimezone).add(1, "month").startOf("day").toDate();
                 break;
             case "yearly":
-                renewalDate = dayjs(startDate).utc().add(1, "year").toDate();
+                renewalDate = dayjs(startDate).tz(customerTimezone).add(1, "year").startOf("day").toDate();
                 break;
             default:
                 throw new Error("Invalid frequency");
@@ -89,15 +88,23 @@ const createSubscription = async (req, res, next) => {
         for (const daysOffset of remindersToSchedule) {
             let reminderDate, reminderLabel;
             if (reminderType === "pre-renewal") {
+                //subtract 7,5,2,1 days(daysOffset) each from the renewal date 
                 reminderDate = renewalDateTz.subtract(daysOffset, "day").startOf("day");
                 reminderLabel = `${daysOffset}-day-pre-renewal`;
             } else {
+                //add 5,3,1 days(daysOffset) to  each on the renewal date after renewal date has elapsed with auto-renew being set
                 reminderDate = renewalDateTz.add(daysOffset, "day").startOf("day");
                 reminderLabel = `${daysOffset}-day-grace-period`;
             }
 
+            /*
+            Purpose: Only schedule reminders that are in the future (after now in the user’s timezone) to avoid scheduling past or current reminders.
+            Example: If now is 2025-05-01T11:00:00.000+01:00 and reminderDate is 2025-05-01T00:00:00.000+01:00, isAfter(now) is false, so this reminder is skipped.
+            */
+
             if (reminderDate.isAfter(now)) {
                 const reminder = await Reminder.create({
+                    //NB: status-pending is added to the creation here by default
                     subscriptionId: subscription._id,
                     reminderLabel,
                     userEmail: user.email,
@@ -172,7 +179,7 @@ const renewSubscription = async (req, res, next) => {
         renewalDate = renewalDate.add(1, frequencyUnit).startOf("day");
 
         // Update subscription
-        subscription.renewalDate = renewalDate.utc().toDate();
+        subscription.renewalDate = renewalDate.toDate(); // Midnight in user's timezone
         subscription.status = "active";
         if (autoRenew !== undefined) {
             subscription.autoRenew = autoRenew;

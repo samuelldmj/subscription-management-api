@@ -19,10 +19,15 @@ const signUp = async (req, res, next) => {
         const { name, email, password, timezone } = req.body;
 
         // Validate timezone if provided
-        if (timezone && !dayjs.tz(timezone)) {
-            const error = new Error("Invalid timezone");
-            error.statusCode = 400;
-            throw error;
+        const now = dayjs();
+        if (timezone) {
+            try {
+                dayjs.tz(now, timezone);
+            } catch (error) {
+                const err = new Error("Invalid timezone");
+                err.statusCode = 400;
+                throw err;
+            }
         }
 
         // Check if user already exists
