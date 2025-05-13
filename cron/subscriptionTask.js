@@ -1,4 +1,3 @@
-// cron/subscriptionTask.js
 import Subscription from "../models/subscription.model.js";
 import SubscriptionHistory from "../models/subscriptionHistory.model.js";
 import Reminder from "../models/reminder.model.js";
@@ -9,9 +8,14 @@ import timezone from "dayjs/plugin/timezone.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-const REMINDERS = [7, 5, 2, 1];
-const GRACE_PERIOD_REMINDERS = [1, 3, 5];
+const PRE_RENEWAL_REMINDERS = {
+    daily: [6, 1], // Hours before renewal (6 hours, 1 hour)
+    weekly: [7, 5, 2, 1], // Days before renewal
+    monthly: [7, 5, 2, 1], // Days before renewal
+    yearly: [7, 5, 2, 1], // Days before renewal
+};
 
+const GRACE_PERIOD_REMINDERS = [1, 3, 5]; // Grace period reminders (overridden by controller)
 
 /*
 
@@ -46,8 +50,6 @@ const processSubscriptionTasks = async () => {
             */
         }).populate("user_id", "timezone email name");
 
-
-
         /*
         Result of subscriptionToExpire will look like this
         [
@@ -77,7 +79,6 @@ const processSubscriptionTasks = async () => {
   }
 ]
         */
-
 
         for (const subscription of subscriptionsToExpire) {
             subscription.status = "expired";
@@ -119,7 +120,7 @@ const processSubscriptionTasks = async () => {
             }
 
             renewalDate = renewalDate.add(1, frequencyUnit).startOf("day");
-            subscription.renewalDate = renewalDate.utc().toDate();
+            subscription.renewalDate = renewalDate.toDate();
             await subscription.save();
 
             // Log audit trail
@@ -134,17 +135,27 @@ const processSubscriptionTasks = async () => {
             const renewalDateTz = renewalDate;
             const gracePeriodEndTz = renewalDateTz.add(7, "day");
             let reminderType = now.isAfter(renewalDateTz) && now.isBefore(gracePeriodEndTz) ? "grace-period" : "pre-renewal";
-            const remindersToSchedule = reminderType === "pre-renewal" ? REMINDERS : GRACE_PERIOD_REMINDERS;
+            const remindersToSchedule = reminderType === "pre-renewal"
+                ? PRE_RENEWAL_REMINDERS[subscription.frequency]
+                : (subscription.frequency !== "daily" ? GRACE_PERIOD_REMINDERS : []); // No grace reminders for daily
 
             const scheduledReminders = [];
-            for (const daysOffset of remindersToSchedule) {
+            for (const offset of remindersToSchedule) {
                 let reminderDate, reminderLabel;
                 if (reminderType === "pre-renewal") {
-                    reminderDate = renewalDateTz.subtract(daysOffset, "day").startOf("day");
-                    reminderLabel = `${daysOffset}-day-pre-renewal`;
+                    if (subscription.frequency === "daily") {
+                        // Use hours for daily reminders
+                        reminderDate = renewalDateTz.subtract(offset, "hour");
+                        reminderLabel = `${offset}-hour-pre-renewal`;
+                    } else {
+                        // Use days for other frequencies
+                        reminderDate = renewalDateTz.subtract(offset, "day").startOf("day");
+                        reminderLabel = `${offset}-day-pre-renewal`;
+                    }
                 } else {
-                    reminderDate = renewalDateTz.add(daysOffset, "day").startOf("day");
-                    reminderLabel = `${daysOffset}-day-grace-period`;
+                    // Grace period (only for non-daily)
+                    reminderDate = renewalDateTz.add(offset, "day").startOf("day");
+                    reminderLabel = `${offset}-day-grace-period`;
                 }
 
                 if (reminderDate.isAfter(now)) {

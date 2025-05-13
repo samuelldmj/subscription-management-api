@@ -1,9 +1,11 @@
-// cron/reminderTask.js
 import Reminder from "../models/reminder.model.js";
+import Subscription from "../models/subscription.model.js";
 import SubscriptionHistory from "../models/subscriptionHistory.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
+import { generateEmailTemplate } from "../misc/emailTemplate.js";
+import sendEmail from "../misc/sendEmail.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -18,12 +20,24 @@ const processReminderTasks = async () => {
 
         for (const reminder of reminders) {
             try {
-                console.log(`Processing reminder ${reminder.reminderLabel} for subscription ${reminder.subscriptionId} at ${now.toISOString()} in ${reminder.timezone}`);
-                let message =
-                    reminder.reminderType === "pre-renewal"
-                        ? `Reminder: Your subscription is due soon (${reminder.reminderLabel})`
-                        : `Your subscription is in grace period. Please renew to continue (${reminder.reminderLabel})`;
-                // Placeholder: await sendEmail(reminder.userEmail, `Subscription Reminder`, message);
+                // Fetch subscription details
+                const subscription = await Subscription.findById(reminder.subscriptionId);
+                if (!subscription) {
+                    throw new Error(`Subscription ${reminder.subscriptionId} not found`);
+                }
+
+                // Generate email content
+                const { subject, html } = generateEmailTemplate({
+                    userName: reminder.userName,
+                    subscriptionName: subscription.name,
+                    renewalDate: subscription.renewalDate,
+                    reminderLabel: reminder.reminderLabel,
+                    reminderType: reminder.reminderType,
+                    customerTimezone: reminder.timezone,
+                });
+
+                // Send email
+                await sendEmail(reminder.userEmail, subject, html);
 
                 reminder.status = "sent";
                 await reminder.save();
@@ -38,6 +52,8 @@ const processReminderTasks = async () => {
                         timezone: reminder.timezone,
                     },
                 });
+
+                console.log(`Processed reminder ${reminder.reminderLabel} for subscription ${reminder.subscriptionId} at ${now.toISOString()} in ${reminder.timezone}`);
             } catch (error) {
                 reminder.status = "failed";
                 await reminder.save();
