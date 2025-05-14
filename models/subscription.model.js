@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const subscriptionSchema = new mongoose.Schema(
     {
@@ -40,23 +45,27 @@ const subscriptionSchema = new mongoose.Schema(
             type: Date,
             required: [true, "Start date is required"],
             validate: {
-                validator: function (value) {
-                    const today = dayjs().startOf("day");
-                    const inputDate = dayjs(value, ["YYYY-MM-DD", "YYYY-MM-DDTHH:mm:ss.SSSZ"], true).startOf("day");
-                    if (!inputDate.isValid()) {
-                        return false;
-                    }
-                    return inputDate.isSame(today, "day");
+                validator: async function (value) {
+                    const user = await mongoose.model("User").findById(this.user_id);
+                    const customerTimezone = user?.timezone || "UTC";
+                    const inputDate = dayjs.tz(value, customerTimezone).startOf("day");
+                    const today = dayjs().tz(customerTimezone).startOf("day");
+                    return inputDate.isValid() && !inputDate.isBefore(today, "day");
                 },
-                message: "Start date must be the current date in YYYY-MM-DD or ISO format",
+                message: "Start date must be today or in the future in YYYY-MM-DD or ISO format",
             },
         },
         renewalDate: {
             type: Date,
             required: [true, "Renewal date is required"],
             validate: {
-                validator: function (value) {
-                    return value > this.startDate && dayjs(value).isAfter(dayjs());
+                validator: async function (value) {
+                    const user = await mongoose.model("User").findById(this.user_id);
+                    const customerTimezone = user?.timezone || "UTC";
+                    const renewalDateTz = dayjs.tz(value, customerTimezone);
+                    const startDateTz = dayjs.tz(this.startDate, customerTimezone);
+                    const nowTz = dayjs().tz(customerTimezone);
+                    return renewalDateTz.isAfter(startDateTz) && renewalDateTz.isAfter(nowTz);
                 },
                 message: "Renewal date must be after the start date and in the future",
             },
@@ -69,7 +78,7 @@ const subscriptionSchema = new mongoose.Schema(
         },
         paymentMethod: {
             type: String,
-            enum: ["Credit Card", "PayPal", "Bank Transfer", "Cash", "Other"],
+            enum: ["Credit Card", "PayPal", "Bank Transfer", "Other"],
             required: [true, "Payment method is required"],
             trim: true,
         },

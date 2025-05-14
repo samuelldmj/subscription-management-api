@@ -1,3 +1,4 @@
+// models/subscriptionHistory.model.js
 import mongoose from "mongoose";
 
 const subscriptionHistorySchema = new mongoose.Schema(
