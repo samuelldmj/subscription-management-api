@@ -1,4 +1,4 @@
-import { defineConfig } from "eslint/config"; // Assuming this is the correct import (see note below)
+import { defineConfig } from "eslint/config";
 import globals from "globals";
 import js from "@eslint/js";
 

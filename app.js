@@ -11,15 +11,18 @@ import cron from "node-cron";
 
 //cron job
 import processSubscriptionTasks from "./cron/subscriptionTask.js";
+import processReminderTasks from "./cron/reminderTask.js";
 
 // Import  models
 import User from "./models/user.model.js";
 import Subscription from "./models/subscription.model.js";
 import SubscriptionHistory from "./models/subscriptionHistory.model.js";
+import reminderModel from "./models/reminder.model.js";
 
 
 import arcjetMiddleware from "./middlewares/arcjet.middleware.js";
-import workFlowRouter from "./routes/workflow.routes.js";
+
+
 
 
 
@@ -50,14 +53,14 @@ app.get('/', (req, res) => {
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/subscriptions', subscriptionRouter);
-app.use('/api/v1/workflows', workFlowRouter);
 
 
 //global errorHandling
 app.use(errorMiddleware);
 
-// Schedule cron job to process subscription tasks daily at midnight
-cron.schedule("0 0 * * *", processSubscriptionTasks);
+// Schedule cron jobs
+cron.schedule("* * * * *", processReminderTasks, { timezone: "UTC" }); // Every minute for testing
+cron.schedule("0 0 * * *", processSubscriptionTasks, { timezone: "UTC" }); // Daily at midnight UTC
 
 // Start server and connect to database
 const startServer = async () => {
